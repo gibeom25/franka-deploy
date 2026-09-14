@@ -1,0 +1,26 @@
+# DEV/TEST PROFILE -- pairs with scripts/dev_motion_server.py, a fake
+# "policy server" that just holds the observed pose and wiggles joint 7 a
+# little. Use this to validate the full franka-deploy pipeline on real
+# hardware (send -> detect -> confirm -> execute) before pointing at an
+# actual trained policy. No cameras needed -- only the current joint state
+# is sent.
+
+request_spec:
+  connection:
+    server_ip: "127.0.0.1"
+    server_port: 9000
+    scheme: "http"
+    predict_endpoint: "/predict"
+    reset_endpoint: "/reset"
+  actions_key: "actions"
+  instruction_field: null
+  fields:
+    - name: "state"
+      source: "robot:joint_positions"
+      dtype: "float32"
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null

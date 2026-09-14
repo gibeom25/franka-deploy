@@ -34,13 +34,25 @@ cd ~/franka-deploy
 pip install -e .
 ```
 
-## Run
+## Run (two processes)
+
+**1. Robot node** -- owns the 1 kHz control loop, nothing else. Must be
+running before you hit "연결" in the dashboard.
+
+```bash
+~/pylibfranka-venv/bin/python -m franka_deploy.robot.robot_node --robot-ip 172.16.0.2 --port 5560
+```
+
+**2. App** -- web dashboard, policy HTTP client, IK, cameras.
 
 ```bash
 ~/pylibfranka-venv/bin/uvicorn franka_deploy.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Then open `http://<this machine>:8000/` for the dashboard.
+Then open `http://<this machine>:8000/` for the dashboard. The "로봇 노드
+주소" field is the robot node's ZMQ address (`tcp://127.0.0.1:5560` by
+default), not the robot's own FCI IP -- that only goes on the robot node's
+`--robot-ip` command line.
 
 ## Recommended workflow (staged rollout)
 
@@ -57,16 +69,42 @@ Then open `http://<this machine>:8000/` for the dashboard.
 
 ## Architecture
 
-Single process (like franka-policy-runner validated on this machine): a
-1 kHz `FR3Runtime` thread tracks a live setpoint through a jerk/accel/
-velocity-clamped reference filter, while a background policy thread talks
-to the remote server and updates that setpoint. See
-`franka_deploy/control_loop.py` for the full state machine and the
-async chunk-overlap scheduling (ported from manipulation-stack's
+**Two processes, not one.** The first version ran everything (web server,
+policy HTTP client, analytic IK, cameras) in the same process as the 1 kHz
+`FR3Runtime` control thread, following franka-policy-runner's validated
+single-process pattern -- but that pattern was only ever validated for
+*cheap* per-tick work (a local, near-free policy call). Live testing here
+hit two real reflex aborts that single-process design doesn't protect
+against:
+- `communication_constraints_violation` right after `connect()`, when
+  connect/reset/first-predict all landed on the control thread's startup.
+- `joint_motion_generator_velocity/acceleration_discontinuity` during
+  EE-delta actions, where analytic IK (~4ms/call) held the GIL long
+  enough to starve the 1 kHz thread of CPU time it needed for its own
+  1ms budget.
+
+A GIL-tuning workaround (`sys.setswitchinterval`, reordering `start()`)
+fixed the first but not the second -- IK cost doesn't go away just by
+scheduling around it. The actual fix is `robot/robot_node.py`: a
+**separate OS process** that owns `FR3Runtime` and nothing else, talked to
+over a ZMQ REQ/REP socket (`robot/zmq_client.py`) by everything else. This
+mirrors `mstack.comm.zmq_core.robot_node.ZMQServerRobot`, which
+manipulation-stack already validated in production for the same reason.
+Within the robot node process the ZMQ handler thread and the control
+thread still share a GIL, but that handler only ever does small
+get_state/set_joint_target work -- nothing CPU-heavy runs there anymore.
+
+A live `FR3Runtime` thread tracks a setpoint through a jerk/accel/
+velocity-clamped reference filter, while a background policy thread (in
+the APP process) talks to the remote server and updates that setpoint via
+ZMQ. See `franka_deploy/control_loop.py` for the full state machine and
+the async chunk-overlap scheduling (ported from manipulation-stack's
 `fr3_policy_client.py`, ~40ms replan tail no longer stalls the arm).
 
 | module | role |
 |---|---|
+| `robot/robot_node.py` | **separate process** -- owns FR3Runtime, ZMQ REP server, nothing else |
+| `robot/zmq_client.py` | app-side stub matching FR3Runtime's public API, talks to robot_node.py |
 | `robot/reference_filter.py`, `robot/fr3_runtime.py` | vendored from franka-policy-runner, unchanged API |
 | `safety/*` | vendored: joint limits, EMA smoother, oscillation watchdog |
 | `kinematics/fr3_kinematics.py` | vendored analytic FK/IK for EE action spaces |

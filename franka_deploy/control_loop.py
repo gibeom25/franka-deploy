@@ -1,6 +1,9 @@
-"""Two-rate control orchestrator: FR3Runtime's 1 kHz local tracking loop +
-a background policy-inference loop that talks to an arbitrary remote
-server and feeds it new setpoints.
+"""Two-rate control orchestrator: FR3Runtime's 1 kHz local tracking loop
+(running in a SEPARATE process, robot/robot_node.py, talked to over ZMQ via
+robot/zmq_client.py -- see that module's docstring for why: real hardware
+faults were observed when IK/web/HTTP work shared a process/GIL with the
+control thread) + a background policy-inference loop in THIS process that
+talks to an arbitrary remote server and feeds it new setpoints.
 
 The chunk-boundary-stall fix (fire the next /predict CHUNK_LEAD ticks
 before the current chunk runs out; drop however many leading indices have
@@ -30,7 +33,7 @@ from typing import Optional
 
 import numpy as np
 
-from franka_deploy.robot.fr3_runtime import FR3Runtime
+from franka_deploy.robot.zmq_client import ZMQRobotClient
 from franka_deploy.safety.limits import clip_to_joint_limits
 from franka_deploy.safety.smoothing import EMASmoother
 from franka_deploy.safety.watchdog import OscillationTripped, OscillationWatchdog
@@ -105,17 +108,17 @@ class ControlLoop:
     """Owns the robot runtime, camera reads, policy client, and the
     background policy thread. One instance per running session."""
 
-    def __init__(self, robot_ip: str, cameras: dict, request_spec: RequestSpec,
+    def __init__(self, robot_node_address: str, camera_manager, request_spec: RequestSpec,
                  loop_cfg: Optional[LoopConfig] = None, safety_kwargs: Optional[dict] = None,
                  gripper_runtime=None):
-        self._robot_ip = robot_ip
-        self._cameras = cameras  # dict[role] -> object with .read() -> (rgb, depth)
+        self._robot_node_address = robot_node_address
+        self._camera_manager = camera_manager  # cameras.manager.CameraManager, own background threads
         self._client = PolicyClient(request_spec)
         self._cfg = loop_cfg or LoopConfig()
         self._safety_kwargs = safety_kwargs or {}
         self._gripper_runtime = gripper_runtime  # optional GripperRuntime, set_target(0..1)
 
-        self._runtime: Optional[FR3Runtime] = None
+        self._runtime: Optional[ZMQRobotClient] = None
         self._smoother = EMASmoother(alpha=self._cfg.ema_alpha)
         self._watchdog = OscillationWatchdog()
         self._adapter: Optional[ActionSpaceAdapter] = None
@@ -138,13 +141,21 @@ class ControlLoop:
             self._state = s
 
     def connect(self, read_only: bool = True) -> None:
-        if self._runtime is not None:
-            self._runtime.stop()
-        self._runtime = FR3Runtime(robot_ip=self._robot_ip, read_only=read_only, **self._safety_kwargs)
+        if self._runtime is None:
+            self._runtime = ZMQRobotClient(self._robot_node_address)
+        self._runtime.connect(read_only=read_only, **self._safety_kwargs)
         self._set_state(State.CONNECTED)
 
     def _read_cameras(self) -> dict:
-        return {role: cam.read()[0] for role, cam in self._cameras.items()}
+        """Non-blocking: pulls whatever the CameraManager's background
+        threads have already captured, rather than waiting on the camera
+        here (see cameras/manager.py's docstring for why)."""
+        out = {}
+        for role in self._camera_manager.roles():
+            rgb, error = self._camera_manager.get_latest(role)
+            if rgb is not None:
+                out[role] = rgb
+        return out
 
     def _current_ctx_and_state(self):
         st = self._runtime.get_state()
@@ -160,10 +171,17 @@ class ControlLoop:
         """One reset + predict cycle to classify the response format. Safe
         to call in read_only mode -- no motion is ever commanded here."""
         self._set_state(State.DETECTING)
-        self._client.reset(instruction)
-        ctx, st, ee_pos = self._current_ctx_and_state()
-        chunk = self._client.predict(ctx)
-        result = detect_action_space(chunk, st["q"], ee_pos)
+        try:
+            self._client.reset(instruction)
+            ctx, st, ee_pos = self._current_ctx_and_state()
+            chunk = self._client.predict(ctx)
+            result = detect_action_space(chunk, st["q"], ee_pos)
+        except Exception:
+            # A bad server address/timeout must not strand the session in
+            # DETECTING forever with no way to retry short of a full
+            # disconnect -- fall back to CONNECTED, which /detect accepts.
+            self._set_state(State.CONNECTED)
+            raise
         self.last_detection = result
         self._set_state(State.AWAITING_CONFIRM)
         return result
@@ -175,14 +193,23 @@ class ControlLoop:
         self._set_state(State.ARMED)
 
     def start(self, instruction: Optional[str] = None) -> None:
+        """Ordered to keep GIL-contending Python work (HTTP calls, JSON)
+        OFF the moment the 1 kHz control thread spins up -- a real
+        `communication_constraints_violation` reflex was observed live when
+        connect() + reset() + the first predict() all landed back-to-back
+        with the control thread's startup. Network calls happen first
+        (still read_only, nothing time-critical yet); the live connect
+        happens last, immediately followed by a settle pause before any
+        other Python work resumes on this thread."""
         if self._adapter is None:
             raise RuntimeError("call detect() then confirm() before start()")
+        self._client.reset(instruction)
         if self._runtime is None or self._runtime.read_only:
             self.connect(read_only=False)
+        time.sleep(0.2)  # let the new 1 kHz thread get its RT priority and settle
         q0 = self._runtime.get_state()["q"]
         self._smoother.reset(q0)
         self._watchdog.reset()
-        self._client.reset(instruction)
         self._stop_evt.clear()
         self._telemetry = Telemetry(state=State.RUNNING)
         self._thread = threading.Thread(target=self._run, daemon=True)

@@ -16,7 +16,7 @@
   <section class="panel" id="panel-connection">
     <h2>1. 연결</h2>
     <div class="row">
-      <label>로봇 IP <input id="robot-ip" value="172.16.0.2"></label>
+      <label>로봇 노드 주소 (robot_node.py) <input id="robot-node-address" value="tcp://127.0.0.1:5560"></label>
       <label>정책 서버 IP <input id="server-ip" placeholder="예: 155.230.189.77"></label>
       <label>포트 <input id="server-port" type="number" value="8080"></label>
     </div>
@@ -27,13 +27,34 @@
       <label>instruction 필드명(선택) <input id="instruction-field" placeholder="예: instruction"></label>
     </div>
     <div class="row">
-      <label>agentview 카메라 시리얼 <input id="cam-agent-serial" placeholder="비우면 mock 이미지"></label>
-      <label>eye_in_hand 카메라 시리얼 <input id="cam-wrist-serial" placeholder="비우면 mock 이미지"></label>
+      <label>agentview 카메라 <select id="cam-agent-serial"><option value="">(mock 이미지)</option></select></label>
+      <label>eye_in_hand 카메라 <select id="cam-wrist-serial"><option value="">(mock 이미지)</option></select></label>
+      <label>&nbsp;<button id="btn-scan-cameras" type="button">카메라 검색</button></label>
     </div>
     <div class="actions">
       <button id="btn-save-config">설정 저장</button>
       <label class="inline"><input type="checkbox" id="read-only-toggle" checked> read_only로 연결</label>
       <button id="btn-connect">연결</button>
+      <button id="btn-disconnect" class="danger">연결 해제</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-cameras">
+    <h2>카메라 확인</h2>
+    <p class="hint">로봇 연결과 무관하게 카메라만 미리 확인할 수 있습니다 (독립된 백그라운드 스레드에서 읽음).</p>
+    <div class="actions">
+      <button id="btn-camera-start">카메라 미리보기 시작</button>
+      <button id="btn-camera-stop">중지</button>
+    </div>
+    <div class="row" id="camera-preview-row">
+      <div class="cam-box">
+        <div class="hint">agentview</div>
+        <img id="cam-preview-agentview" class="cam-preview" alt="agentview">
+      </div>
+      <div class="cam-box">
+        <div class="hint">eye_in_hand</div>
+        <img id="cam-preview-eye_in_hand" class="cam-preview" alt="eye_in_hand">
+      </div>
     </div>
   </section>
 
@@ -44,6 +65,72 @@
       <select id="example-select"><option value="">-- 예시 불러오기 --</option></select>
       <button id="btn-load-example">불러오기</button>
     </div>
+    <table id="schema-summary">
+      <thead>
+        <tr><th>필드명</th><th>출처</th><th>dtype</th><th>shape</th><th>인코딩</th><th></th></tr>
+      </thead>
+      <tbody id="schema-summary-body"></tbody>
+    </table>
+
+    <details id="field-builder">
+      <summary>+ 필드 추가 (JSON 직접 안 써도 됨)</summary>
+      <div class="row">
+        <label>필드명 <input id="fb-name" placeholder="예: agentview_image"></label>
+        <label>출처
+          <input id="fb-source" list="fb-source-suggestions" placeholder="camera:agentview">
+          <datalist id="fb-source-suggestions">
+            <option value="camera:agentview">
+            <option value="camera:eye_in_hand">
+            <option value="robot:joint_positions">
+            <option value="robot:joint_positions7">
+            <option value="robot:joint_velocities">
+            <option value="robot:ee_pos">
+            <option value="robot:ee_quat">
+            <option value="robot:ee_pos_quat">
+            <option value="robot:gripper">
+            <option value="static:">
+            <option value="custom:user_plugins.">
+          </datalist>
+        </label>
+      </div>
+      <div class="row">
+        <label>dtype
+          <select id="fb-dtype">
+            <option value="">(그대로)</option>
+            <option value="uint8">uint8</option>
+            <option value="float32">float32</option>
+            <option value="float64">float64</option>
+            <option value="int32">int32</option>
+          </select>
+        </label>
+        <label>shape (쉼표구분, 예: 1,1,3,128,128) <input id="fb-shape" placeholder="비우면 안 바꿈"></label>
+        <label>resize H,W <input id="fb-resize" placeholder="예: 128,128"></label>
+      </div>
+      <div class="row">
+        <label>layout
+          <select id="fb-layout">
+            <option value="HWC">HWC</option>
+            <option value="CHW">CHW</option>
+          </select>
+        </label>
+        <label>normalize scale (예: 0.00392 = 1/255) <input id="fb-normalize-scale" type="number" step="0.0001"></label>
+        <label>인코딩
+          <select id="fb-encoding">
+            <option value="none">none (JSON 배열)</option>
+            <option value="raw_bytes_base64">raw_bytes_base64</option>
+            <option value="png_base64">png_base64</option>
+            <option value="jpeg_base64">jpeg_base64</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>transform_fn (선택, 예: user_plugins.embed_instruction) <input id="fb-transform-fn"></label>
+      </div>
+      <div class="actions">
+        <button id="btn-add-field">이 필드 추가</button>
+      </div>
+    </details>
+
     <textarea id="schema-editor" rows="18" spellcheck="false"></textarea>
     <div class="actions">
       <button id="btn-apply-schema">스키마 적용</button>

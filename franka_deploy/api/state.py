@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from franka_deploy.cameras import CameraConfig
+from franka_deploy.cameras.manager import CameraManager
 from franka_deploy.control_loop import ControlLoop, LoopConfig
 from franka_deploy.safety.limits import DEFAULT_A_MAX, DEFAULT_FILTER_WN, DEFAULT_J_MAX, DEFAULT_V_MAX
 from franka_deploy.schema.spec import RequestSpec
@@ -16,7 +17,11 @@ from franka_deploy.schema.spec import RequestSpec
 
 @dataclass
 class AppConfig:
-    robot_ip: str = "172.16.0.2"
+    # Address of the robot_node.py process (separate OS process -- the 1 kHz
+    # control loop must never share a GIL with this app; see
+    # franka_deploy/robot/robot_node.py), NOT the robot's own FCI IP -- that
+    # lives in the node process's own --robot-ip launch argument.
+    robot_node_address: str = "tcp://127.0.0.1:5560"
     cameras: list[CameraConfig] = field(default_factory=list)
     request_spec: Optional[RequestSpec] = None
     loop: LoopConfig = field(default_factory=LoopConfig)
@@ -30,6 +35,7 @@ class AppState:
     def __init__(self) -> None:
         self.config = AppConfig()
         self.loop: Optional[ControlLoop] = None
+        self.camera_manager = CameraManager()
 
 
 APP_STATE = AppState()

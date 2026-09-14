@@ -18,6 +18,19 @@ from typing import List, Optional, Tuple
 import numpy as np
 
 
+def list_devices() -> List[dict]:
+    """Enumerate connected RealSense devices with name + serial, for a
+    dashboard picker -- just query_devices(), no pipeline opened, so it's
+    safe to call even while another camera on the bus is mid-stream."""
+    import pyrealsense2 as rs
+
+    ctx = rs.context()
+    return [
+        {"name": dev.get_info(rs.camera_info.name), "serial": dev.get_info(rs.camera_info.serial_number)}
+        for dev in ctx.query_devices()
+    ]
+
+
 def get_device_ids(reset: bool = False) -> List[str]:
     """List connected RealSense serials.
 

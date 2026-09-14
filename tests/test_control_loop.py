@@ -1,8 +1,8 @@
 """Full state-machine test for control_loop.ControlLoop (connect -> detect ->
 confirm -> start -> stop) against a stub HTTP policy server and a fake
-FR3Runtime -- no pylibfranka or hardware needed. This is the piece of the
-project with the most moving parts (async chunk overlap, staged rollout,
-threading) and the least coverage otherwise.
+robot-node client -- no pylibfranka, ZMQ, or hardware needed. This is the
+piece of the project with the most moving parts (async chunk overlap,
+staged rollout, threading) and the least coverage otherwise.
 """
 
 import json
@@ -18,6 +18,7 @@ import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
 import franka_deploy.control_loop as control_loop_module  # noqa: E402
+from franka_deploy.cameras.manager import CameraManager  # noqa: E402
 from franka_deploy.cameras.mock import MockCamera  # noqa: E402
 from franka_deploy.control_loop import ControlLoop, LoopConfig, State  # noqa: E402
 from franka_deploy.schema.serialize import request_spec_from_dict  # noqa: E402
@@ -30,20 +31,27 @@ EXAMPLE_PATH = (
 )
 
 
-class FakeFR3Runtime:
-    """Stands in for the pylibfranka-backed FR3Runtime: instantly "tracks"
+class FakeRobotNodeClient:
+    """Stands in for robot/zmq_client.ZMQRobotClient (i.e. the whole
+    separate robot_node.py process + pylibfranka): instantly "tracks"
     whatever target it's given (no reference filter -- that's already
     covered by test_reference_filter.py) so the control loop's own timing
-    and state-machine logic can be tested without hardware."""
+    and state-machine logic can be tested without hardware or a second
+    process. Matches ZMQRobotClient's shape: constructed with just an
+    address, `.connect(read_only=..., **safety_kwargs)` sets the mode."""
 
-    def __init__(self, robot_ip: str, read_only: bool = True, **kwargs):
-        self.read_only = read_only
+    def __init__(self, address: str):
+        self.read_only = True
         self._lock = threading.Lock()
         self._q = RESET_Q.copy()
         self._dq = np.zeros(7)
         T = np.eye(4)
         T[:3, 3] = EE_POS_NOW
         self._ee_pose_flat = T.flatten(order="F")
+
+    def connect(self, read_only: bool = True, **safety_kwargs) -> dict:
+        self.read_only = read_only
+        return {"read_only": read_only}
 
     def get_state(self) -> dict:
         with self._lock:
@@ -91,7 +99,7 @@ class _StubHandler(BaseHTTPRequestHandler):
 
 
 def test_control_loop_full_staged_rollout(monkeypatch):
-    monkeypatch.setattr(control_loop_module, "FR3Runtime", FakeFR3Runtime)
+    monkeypatch.setattr(control_loop_module, "ZMQRobotClient", FakeRobotNodeClient)
 
     server = HTTPServer(("127.0.0.1", 0), _StubHandler)
     port = server.server_address[1]
@@ -103,9 +111,10 @@ def test_control_loop_full_staged_rollout(monkeypatch):
         spec.connection.server_ip = "127.0.0.1"
         spec.connection.server_port = port
 
-        cameras = {"agentview": MockCamera(), "eye_in_hand": MockCamera()}
+        camera_manager = CameraManager()
+        camera_manager.start({"agentview": MockCamera(), "eye_in_hand": MockCamera()})
         loop_cfg = LoopConfig(fps=50.0, exec_horizon=10, lead_ticks=2)
-        loop = ControlLoop("172.16.0.2", cameras, spec, loop_cfg)
+        loop = ControlLoop("tcp://127.0.0.1:5560", camera_manager, spec, loop_cfg)
 
         loop.connect(read_only=True)
         assert loop.state == State.CONNECTED
@@ -130,6 +139,7 @@ def test_control_loop_full_staged_rollout(monkeypatch):
         loop.stop()
         assert loop.state == State.STOPPED
     finally:
+        camera_manager.stop()
         server.shutdown()
         thread.join(timeout=2)
 

@@ -11,6 +11,100 @@ const DEFAULT_SCHEMA_FIELDS = [
 
 $("schema-editor").value = JSON.stringify(DEFAULT_SCHEMA_FIELDS, null, 2);
 
+// ------------------------------------------------------------- schema table
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[c]);
+}
+
+function readSchemaFields() {
+  return JSON.parse($("schema-editor").value);
+}
+
+function writeSchemaFields(fields) {
+  $("schema-editor").value = JSON.stringify(fields, null, 2);
+  renderSchemaSummary();
+}
+
+function renderSchemaSummary() {
+  const tbody = $("schema-summary-body");
+  let fields;
+  try {
+    fields = JSON.parse($("schema-editor").value);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="err">JSON 파싱 오류: ${escapeHtml(e.message)}</td></tr>`;
+    return;
+  }
+  if (!Array.isArray(fields) || fields.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="hint">필드 없음</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = fields.map((f, i) => `
+    <tr>
+      <td class="mono">${escapeHtml(f.name ?? "")}</td>
+      <td class="mono">${escapeHtml(f.source ?? "")}</td>
+      <td>${escapeHtml(f.dtype ?? "-")}</td>
+      <td>${f.shape ? escapeHtml(JSON.stringify(f.shape)) : "-"}</td>
+      <td>${escapeHtml(f.encoding ?? "none")}</td>
+      <td><button class="field-delete-btn" data-idx="${i}" title="필드 삭제">✕</button></td>
+    </tr>`).join("");
+}
+
+$("schema-summary-body").addEventListener("click", (ev) => {
+  const btn = ev.target.closest(".field-delete-btn");
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  const fields = readSchemaFields();
+  fields.splice(idx, 1);
+  writeSchemaFields(fields);
+});
+
+$("schema-editor").addEventListener("input", renderSchemaSummary);
+renderSchemaSummary();
+
+// ---------------------------------------------------------------- field builder
+function parseIntList(s) {
+  if (!s || !s.trim()) return null;
+  return s.split(",").map((v) => parseInt(v.trim(), 10));
+}
+
+$("btn-add-field").addEventListener("click", () => {
+  const name = $("fb-name").value.trim();
+  const source = $("fb-source").value.trim();
+  if (!name || !source) { alert("필드명과 출처는 필수입니다."); return; }
+
+  const scaleStr = $("fb-normalize-scale").value.trim();
+  const field = {
+    name,
+    source,
+    dtype: $("fb-dtype").value || null,
+    shape: parseIntList($("fb-shape").value),
+    resize: parseIntList($("fb-resize").value),
+    layout: $("fb-layout").value,
+    normalize: scaleStr ? { scale: parseFloat(scaleStr) } : null,
+    encoding: $("fb-encoding").value,
+    transform_fn: $("fb-transform-fn").value.trim() || null,
+  };
+
+  let fields;
+  try {
+    fields = readSchemaFields();
+    if (!Array.isArray(fields)) fields = [];
+  } catch (e) {
+    fields = [];
+  }
+  fields.push(field);
+  writeSchemaFields(fields);
+
+  for (const id of ["fb-name", "fb-source", "fb-shape", "fb-resize", "fb-normalize-scale", "fb-transform-fn"]) {
+    $(id).value = "";
+  }
+  $("fb-dtype").value = "";
+  $("fb-layout").value = "HWC";
+  $("fb-encoding").value = "none";
+});
+
 // ------------------------------------------------------------ state badge
 function setBadge(state) {
   const el = $("state-badge");
@@ -39,7 +133,7 @@ function gatherConfig() {
     cameras.push({ role: "eye_in_hand", serial: null });
   }
   return {
-    robot_ip: $("robot-ip").value.trim(),
+    robot_node_address: $("robot-node-address").value.trim(),
     cameras,
     request_spec: {
       connection: {
@@ -119,6 +213,53 @@ $("btn-load-example").addEventListener("click", async () => {
   $("schema-status").textContent = `예시 '${name}' 불러옴 (참고용, 저장하려면 '스키마 적용' 클릭)`;
 });
 
+// ------------------------------------------------------------------- cameras
+async function scanCameras() {
+  const r = await fetch("/api/cameras/devices");
+  if (!r.ok) return;
+  const devices = await r.json();  // [{name, serial}, ...]
+  for (const selectId of ["cam-agent-serial", "cam-wrist-serial"]) {
+    const sel = $(selectId);
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">(mock 이미지)</option>';
+    for (const d of devices) {
+      const opt = document.createElement("option");
+      opt.value = d.serial;
+      opt.textContent = `${d.name} — ${d.serial}`;
+      sel.appendChild(opt);
+    }
+    if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  }
+}
+
+$("btn-scan-cameras").addEventListener("click", scanCameras);
+scanCameras();
+
+let cameraPreviewTimer = null;
+
+function refreshCameraFrames() {
+  const t = Date.now();
+  for (const role of ["agentview", "eye_in_hand"]) {
+    $(`cam-preview-${role}`).src = `/api/cameras/${role}/frame.jpg?t=${t}`;
+  }
+}
+
+$("btn-camera-start").addEventListener("click", async () => {
+  const r = await fetch("/api/cameras/start", { method: "POST" });
+  const data = await r.json();
+  if (!r.ok) { alert("카메라 시작 실패: " + (data.detail || r.status)); return; }
+  if (cameraPreviewTimer) clearInterval(cameraPreviewTimer);
+  cameraPreviewTimer = setInterval(refreshCameraFrames, 500);
+  refreshCameraFrames();
+});
+
+$("btn-camera-stop").addEventListener("click", async () => {
+  if (cameraPreviewTimer) { clearInterval(cameraPreviewTimer); cameraPreviewTimer = null; }
+  const r = await fetch("/api/cameras/stop", { method: "POST" });
+  const data = await r.json();
+  if (!r.ok) alert("카메라 중지 실패: " + (data.detail || r.status));
+});
+
 // ------------------------------------------------------------------ connect
 $("btn-connect").addEventListener("click", async () => {
   const readOnly = $("read-only-toggle").checked;
@@ -129,6 +270,13 @@ $("btn-connect").addEventListener("click", async () => {
   const data = await r.json();
   if (!r.ok) { alert("연결 실패: " + (data.detail || r.status)); return; }
   setBadge(data.state);
+});
+
+$("btn-disconnect").addEventListener("click", async () => {
+  const r = await fetch("/api/control/disconnect", { method: "POST" });
+  const data = await r.json();
+  setBadge(data.state);
+  $("detect-result").classList.add("hidden");
 });
 
 // ------------------------------------------------------------------- detect
@@ -200,14 +348,21 @@ $("btn-confirm").addEventListener("click", async () => {
 
 // --------------------------------------------------------------- run controls
 $("btn-start").addEventListener("click", async () => {
-  const instruction = $("instruction").value.trim() || null;
-  const r = await fetch("/api/control/start", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ instruction }),
-  });
-  const data = await r.json();
-  if (!r.ok) { alert("시작 실패: " + (data.detail || r.status)); return; }
-  setBadge(data.state);
+  const btn = $("btn-start");
+  if (btn.disabled) return;  // guard against double-click firing two /start calls
+  btn.disabled = true;
+  try {
+    const instruction = $("instruction").value.trim() || null;
+    const r = await fetch("/api/control/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instruction }),
+    });
+    const data = await r.json();
+    if (!r.ok) { alert("시작 실패: " + (data.detail || r.status)); return; }
+    setBadge(data.state);
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 1000);
+  }
 });
 
 $("btn-stop").addEventListener("click", async () => {

@@ -21,9 +21,14 @@ def _ensure_loop() -> ControlLoop:
     if APP_STATE.loop is None:
         if cfg.request_spec is None:
             raise HTTPException(400, "no request_spec configured -- POST /api/config first")
-        cameras = build_cameras(cfg.cameras)
+        # Reuse the shared CameraManager (same one /api/cameras/start uses)
+        # rather than opening the cameras a second time -- a RealSense
+        # device can't be opened by two pipelines at once.
+        if not APP_STATE.camera_manager.roles() and cfg.cameras:
+            APP_STATE.camera_manager.start(build_cameras(cfg.cameras))
         safety_kwargs = dict(v_max=cfg.v_max, a_max=cfg.a_max, j_max=cfg.j_max, filter_wn=cfg.filter_wn)
-        APP_STATE.loop = ControlLoop(cfg.robot_ip, cameras, cfg.request_spec, cfg.loop, safety_kwargs)
+        APP_STATE.loop = ControlLoop(cfg.robot_node_address, APP_STATE.camera_manager,
+                                      cfg.request_spec, cfg.loop, safety_kwargs)
     return APP_STATE.loop
 
 
@@ -65,7 +70,11 @@ def confirm(body: dict):
 @router.post("/start")
 def start(body: dict = {}):
     loop = _ensure_loop()
-    if loop.state.value != "armed":
+    # "stopped" is a valid restart point, not just "armed": the confirmed
+    # ActionSpaceSpec (control_loop.py's self._adapter) survives stop() --
+    # only /disconnect clears it -- so repeated Stop -> Start during one
+    # session shouldn't force detect+confirm again each time.
+    if loop.state.value not in ("armed", "stopped"):
         raise HTTPException(409, f"call /detect then /confirm first (state={loop.state.value})")
     try:
         loop.start(instruction=body.get("instruction"))
@@ -86,6 +95,20 @@ def estop():
     if APP_STATE.loop is not None:
         APP_STATE.loop.estop()
     return {"state": APP_STATE.loop.state.value if APP_STATE.loop else "idle"}
+
+
+@router.post("/disconnect")
+def disconnect():
+    """Fully release the session, robot connection included, and clear it
+    so /api/config accepts changes again. /stop and /estop alone only halt
+    the policy loop -- the request_spec is baked into the PolicyClient at
+    ControlLoop construction time, so changing it requires a fresh
+    ControlLoop, which means releasing the current FCI connection first
+    (only one client at a time)."""
+    if APP_STATE.loop is not None:
+        APP_STATE.loop.estop()
+        APP_STATE.loop = None
+    return {"state": "idle"}
 
 
 @router.get("/state")

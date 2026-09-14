@@ -27,7 +27,7 @@ EXAMPLES_DIR = Path(__file__).resolve().parents[1] / "configs" / "examples"
 def get_config():
     cfg = APP_STATE.config
     return {
-        "robot_ip": cfg.robot_ip,
+        "robot_node_address": cfg.robot_node_address,
         "cameras": [asdict(c) for c in cfg.cameras],
         "request_spec": request_spec_to_dict(cfg.request_spec) if cfg.request_spec else None,
         "loop": asdict(cfg.loop),
@@ -40,8 +40,8 @@ def set_config(body: dict):
     if APP_STATE.loop is not None:
         raise HTTPException(409, "stop the running session before changing config")
     cfg = APP_STATE.config
-    if "robot_ip" in body:
-        cfg.robot_ip = body["robot_ip"]
+    if "robot_node_address" in body:
+        cfg.robot_node_address = body["robot_node_address"]
     if "cameras" in body:
         cfg.cameras = [CameraConfig(**c) for c in body["cameras"]]
     if "request_spec" in body and body["request_spec"] is not None:
