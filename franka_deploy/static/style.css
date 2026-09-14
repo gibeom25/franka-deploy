@@ -1,44 +1,64 @@
 :root {
-  --bg: #0a0a0d;
-  --panel: #16161b;
-  --panel-2: #1d1d24;
-  --border: #2a2a33;
-  --border-soft: #202027;
-  --text: #eceef2;
-  --muted: #8b8b97;
+  --bg: #000000;
+  --panel: #1a1a1a;
+  --panel-2: #262626;
+  --border: #3a3a3a;
+  --border-soft: #2a2a2a;
+  --text: #ffffff;
+  --muted: #a3a3a3;
   --accent: #5b8cff;
-  --accent-soft: rgba(91, 140, 255, 0.14);
+  --accent-soft: rgba(91, 140, 255, 0.16);
   --danger: #f0555a;
   --ok: #2fb872;
   --warn: #e0a53d;
   --radius: 10px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -12px rgba(0, 0, 0, 0.7);
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(1200px 500px at 15% -10%, rgba(91, 140, 255, 0.07), transparent 60%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   font-family: "Pretendard", -apple-system, "Segoe UI", sans-serif;
-  padding: 0 20px 60px;
   -webkit-font-smoothing: antialiased;
 }
 
-header {
+.app-shell { display: flex; min-height: 100vh; align-items: flex-start; }
+
+.sidebar {
+  flex: none;
+  width: 208px;
   position: sticky;
   top: 0;
-  z-index: 10;
+  height: 100vh;
+  padding: 22px 14px;
+  border-right: 1px solid var(--border-soft);
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 4px;
-  background: linear-gradient(var(--bg) 82%, transparent);
-  backdrop-filter: blur(6px);
+  flex-direction: column;
+  gap: 24px;
 }
+.sidebar-top { display: flex; flex-direction: column; gap: 10px; padding: 0 6px; }
+.sidebar-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tabs { display: flex; flex-direction: column; gap: 4px; }
+.tab-btn {
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 550;
+}
+.tab-btn:hover { background: var(--panel); color: var(--text); border-color: transparent; }
+.tab-btn.active { background: var(--panel-2); color: var(--text); border-color: var(--border); }
+
 h1 {
   font-size: 1.15rem;
   font-weight: 650;
@@ -68,12 +88,15 @@ h2 .n {
 }
 
 main {
+  flex: 1;
+  min-width: 0;
   max-width: 920px;
-  margin: 0 auto;
+  padding: 22px 24px 60px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
+.tab-page { display: flex; flex-direction: column; gap: 18px; }
 
 .panel {
   background: var(--panel);
@@ -238,3 +261,21 @@ details#telemetry-raw summary { cursor: pointer; color: var(--muted); font-size:
   background: rgba(224, 165, 61, 0.15); color: var(--warn); border-color: transparent;
 }
 .badge.connected, .badge.stopped { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+@media (max-width: 720px) {
+  .app-shell { flex-direction: column; }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-right: none;
+    border-bottom: 1px solid var(--border-soft);
+    padding: 14px 16px;
+  }
+  .sidebar-top { flex-direction: row; align-items: center; padding: 0; }
+  .tabs { flex-direction: row; }
+  main { padding: 18px 16px 48px; max-width: 100%; }
+}

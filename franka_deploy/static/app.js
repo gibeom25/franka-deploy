@@ -4,6 +4,27 @@
 
 const $ = (id) => document.getElementById(id);
 
+// --------------------------------------------------------------------- tabs
+function setTab(name) {
+  document.querySelectorAll(".tab-page").forEach((el) => {
+    el.classList.toggle("hidden", el.dataset.tab !== name);
+  });
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === name);
+  });
+  try { localStorage.setItem("franka-deploy-tab", name); } catch (e) { /* ignore */ }
+}
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setTab(btn.dataset.tab));
+});
+(() => {
+  let initial = "settings";
+  try { initial = localStorage.getItem("franka-deploy-tab") || "settings"; } catch (e) { /* ignore */ }
+  const fromUrl = new URLSearchParams(location.search).get("tab");
+  if (fromUrl === "settings" || fromUrl === "deploy") initial = fromUrl;
+  setTab(initial);
+})();
+
 const DEFAULT_SCHEMA_FIELDS = [
   { name: "instruction", source: "static:pick up the cup", dtype: null, shape: null,
     resize: null, layout: "HWC", normalize: null, encoding: "none", transform_fn: null },
