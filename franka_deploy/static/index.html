@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>franka-deploy</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>franka-deploy</h1>
+  <span id="state-badge" class="badge idle">idle</span>
+</header>
+
+<main>
+  <section class="panel" id="panel-connection">
+    <h2>1. 연결</h2>
+    <div class="row">
+      <label>로봇 IP <input id="robot-ip" value="172.16.0.2"></label>
+      <label>정책 서버 IP <input id="server-ip" placeholder="예: 155.230.189.77"></label>
+      <label>포트 <input id="server-port" type="number" value="8080"></label>
+    </div>
+    <div class="row">
+      <label>/predict 경로 <input id="predict-endpoint" value="/predict"></label>
+      <label>/reset 경로 <input id="reset-endpoint" value="/reset"></label>
+      <label>응답 액션 키 <input id="actions-key" value="actions"></label>
+      <label>instruction 필드명(선택) <input id="instruction-field" placeholder="예: instruction"></label>
+    </div>
+    <div class="row">
+      <label>agentview 카메라 시리얼 <input id="cam-agent-serial" placeholder="비우면 mock 이미지"></label>
+      <label>eye_in_hand 카메라 시리얼 <input id="cam-wrist-serial" placeholder="비우면 mock 이미지"></label>
+    </div>
+    <div class="actions">
+      <button id="btn-save-config">설정 저장</button>
+      <label class="inline"><input type="checkbox" id="read-only-toggle" checked> read_only로 연결</label>
+      <button id="btn-connect">연결</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-schema">
+    <h2>2. 송신 스키마 (사용자 지정)</h2>
+    <p class="hint">모델에 보낼 필드를 자유롭게 정의합니다. 예시를 불러와 참고만 하세요 -- 기본값이 아닙니다.</p>
+    <div class="actions">
+      <select id="example-select"><option value="">-- 예시 불러오기 --</option></select>
+      <button id="btn-load-example">불러오기</button>
+    </div>
+    <textarea id="schema-editor" rows="18" spellcheck="false"></textarea>
+    <div class="actions">
+      <button id="btn-apply-schema">스키마 적용</button>
+      <span id="schema-status"></span>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-detect">
+    <h2>3. 응답 포맷 감지 &amp; 확인</h2>
+    <div class="row">
+      <label>reset instruction <input id="instruction" placeholder="예: pick up the cup"></label>
+      <button id="btn-detect">감지 실행 (1회 /reset + /predict)</button>
+    </div>
+    <div id="detect-result" class="hidden">
+      <table>
+        <tbody id="detect-table"></tbody>
+      </table>
+      <p class="hint">확신도가 낮거나 결과가 틀렸다면 아래에서 직접 골라 확정하세요.</p>
+      <div class="row">
+        <label>액션 스페이스
+          <select id="override-kind">
+            <option value="joint_absolute">joint_absolute</option>
+            <option value="joint_delta">joint_delta</option>
+            <option value="ee_absolute">ee_absolute</option>
+            <option value="ee_delta">ee_delta</option>
+          </select>
+        </label>
+        <label>그리퍼 포함 <input type="checkbox" id="override-has-gripper" checked></label>
+        <label>그리퍼 컨벤션
+          <select id="override-gripper-conv">
+            <option value="0_1">0=open .. 1=closed</option>
+            <option value="-1_1">-1=open .. 1=closed</option>
+            <option value="none">없음</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>회전 표현 (EE 모드만)
+          <select id="override-rot-repr">
+            <option value="">-</option>
+            <option value="axis_angle">axis_angle (3)</option>
+            <option value="quat">quat (4)</option>
+            <option value="rot6d">rot6d (6)</option>
+          </select>
+        </label>
+        <label>delta pos scale <input id="override-pos-scale" type="number" step="0.01" value="1.0"></label>
+        <label>delta rot scale <input id="override-rot-scale" type="number" step="0.01" value="1.0"></label>
+      </div>
+      <button id="btn-confirm">이대로 확정</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-safety">
+    <h2>4. 안전 한계 &amp; 청크 타이밍</h2>
+    <div class="row">
+      <label>v_max (rad/s) <input id="v-max" type="number" step="0.1" value="1.0"></label>
+      <label>a_max (rad/s²) <input id="a-max" type="number" step="0.1" value="4.0"></label>
+      <label>j_max (rad/s³) <input id="j-max" type="number" step="10" value="3000"></label>
+      <label>filter wn <input id="filter-wn" type="number" step="0.5" value="10"></label>
+    </div>
+    <div class="row">
+      <label>fps <input id="loop-fps" type="number" step="1" value="20"></label>
+      <label>exec_horizon <input id="loop-exec-horizon" type="number" step="1" value="10"></label>
+      <label>lead_ticks (K) <input id="loop-lead-ticks" type="number" step="1" value="2"></label>
+      <label>max_step_rad <input id="loop-max-step" type="number" step="0.01" value="0.5"></label>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-run">
+    <h2>5. 실행</h2>
+    <div class="actions">
+      <button id="btn-start" class="primary">Start</button>
+      <button id="btn-stop">Stop</button>
+      <button id="btn-estop" class="danger">E-STOP</button>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-telemetry">
+    <h2>텔레메트리</h2>
+    <pre id="telemetry-view">연결 대기 중...</pre>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

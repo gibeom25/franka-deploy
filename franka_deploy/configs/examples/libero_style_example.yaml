@@ -1,0 +1,58 @@
+# EXAMPLE PROFILE -- not a default. Demonstrates the schema DSL using the
+# protocol shape the user described when this project was scoped:
+#
+#   client camera key   -> agentview_rgb / eye_in_hand_rgb (RGB uint8, PNG)
+#   model camera key    -> agentview_image / eye_in_hand_image
+#                          float32 [1,1,3,128,128] (server resizes/normalizes
+#                          in this particular protocol's original form, but
+#                          here the client does the resize since franka-deploy
+#                          fields are self-contained -- drop `resize`/`dtype`
+#                          if your server truly wants the raw PNG instead)
+#   language           -> lang_emb, float32 [1,512] -- no generic pipeline can
+#                          produce a language embedding, so this uses a
+#                          `custom:` plugin (see franka_deploy/schema/plugins.py
+#                          and write ~/franka-deploy/user_plugins.py:embed_instruction)
+#   robot state         -> not used by this example model, so omitted
+#   response            -> {"actions": float32 [10, 8]} joint_absolute,
+#                          columns joint1..7 (rad) + gripper (0..1)
+#
+# Adjust server_ip/port/actions_key to your actual server before using this
+# for real -- these are illustrative values only.
+
+request_spec:
+  connection:
+    server_ip: "0.0.0.0"
+    server_port: 8080
+    scheme: "http"
+    predict_endpoint: "/predict"
+    reset_endpoint: "/reset"
+  actions_key: "actions"
+  instruction_field: "instruction"
+  fields:
+    - name: "agentview_image"
+      source: "camera:agentview"
+      dtype: "float32"
+      shape: [1, 1, 3, 128, 128]
+      resize: [128, 128]
+      layout: "CHW"
+      normalize: {scale: 0.00392156862745098}  # 1/255
+      encoding: "none"
+      transform_fn: null
+    - name: "eye_in_hand_image"
+      source: "camera:eye_in_hand"
+      dtype: "float32"
+      shape: [1, 1, 3, 128, 128]
+      resize: [128, 128]
+      layout: "CHW"
+      normalize: {scale: 0.00392156862745098}
+      encoding: "none"
+      transform_fn: null
+    - name: "lang_emb"
+      source: "custom:user_plugins.embed_instruction"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
