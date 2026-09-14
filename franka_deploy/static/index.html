@@ -197,6 +197,19 @@
       <label>lead_ticks (K) <input id="loop-lead-ticks" type="number" step="1" value="2"></label>
       <label>max_step_rad <input id="loop-max-step" type="number" step="0.01" value="0.5"></label>
     </div>
+    <p class="hint">진동/흔들림 방지: EMA smoothing이 노이즈 있는 원시 정책 출력을 먼저 누그러뜨리고,
+      레퍼런스 필터(위 v/a/j_max)가 항상 부드럽게 추종시키고, 워치독이 그래도 남은 진동(측정 dq
+      부호가 자꾸 뒤집힘)을 감지하면 자동으로 정지시킵니다.</p>
+    <div class="row">
+      <label>EMA smoothing alpha (작을수록 부드러움) <input id="loop-ema-alpha" type="number" step="0.05" min="0.01" max="1" value="0.3"></label>
+      <label class="inline"><input type="checkbox" id="loop-watchdog-enabled" checked> 오실레이션 워치독 사용</label>
+    </div>
+    <div class="row">
+      <label>워치독 윈도우(틱) <input id="loop-watchdog-window" type="number" step="1" value="50"></label>
+      <label>워치독 임계 부호전환비율 <input id="loop-watchdog-threshold" type="number" step="0.05" min="0" max="1" value="0.5"></label>
+      <label>워치독 연속 트립 횟수 <input id="loop-watchdog-trip" type="number" step="1" value="3"></label>
+      <label>워치독 데드존 (rad/s) <input id="loop-watchdog-deadzone" type="number" step="0.005" value="0.02"></label>
+    </div>
   </section>
 
   <section class="panel" id="panel-run">

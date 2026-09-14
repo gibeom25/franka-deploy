@@ -62,8 +62,13 @@ class LoopConfig:
     lead_ticks: int = 2
     max_step_rad: float = 0.5   # per-tick |target-measured| clamp -- independent of, and in
                                  # addition to, the reference filter's own v/a/j limits
-    ema_alpha: float = 0.3
+    ema_alpha: float = 0.3      # smaller = smoother/slower to react (softens a noisy raw policy
+                                 # output BEFORE it reaches the jerk-limited reference filter)
     watchdog_enabled: bool = True
+    watchdog_window: int = 50          # ticks of measured dq history per decision
+    watchdog_threshold: float = 0.5    # sign-change ratio (0..1) that counts as oscillation
+    watchdog_trip_count: int = 3       # consecutive tripped windows required before stopping
+    watchdog_deadzone: float = 0.02    # rad/s; a joint under this isn't "moving" for sign-change purposes
 
 
 @dataclass
@@ -120,7 +125,12 @@ class ControlLoop:
 
         self._runtime: Optional[ZMQRobotClient] = None
         self._smoother = EMASmoother(alpha=self._cfg.ema_alpha)
-        self._watchdog = OscillationWatchdog()
+        self._watchdog = OscillationWatchdog(
+            window_size=self._cfg.watchdog_window,
+            sign_change_ratio_threshold=self._cfg.watchdog_threshold,
+            trip_count_threshold=self._cfg.watchdog_trip_count,
+            velocity_deadzone=self._cfg.watchdog_deadzone,
+        )
         self._adapter: Optional[ActionSpaceAdapter] = None
         self.last_detection: Optional[DetectionResult] = None
 
