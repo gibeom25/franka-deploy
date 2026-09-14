@@ -106,7 +106,8 @@ the async chunk-overlap scheduling (ported from manipulation-stack's
 | `robot/robot_node.py` | **separate process** -- owns FR3Runtime, ZMQ REP server, nothing else |
 | `robot/zmq_client.py` | app-side stub matching FR3Runtime's public API, talks to robot_node.py |
 | `robot/reference_filter.py`, `robot/fr3_runtime.py` | vendored from franka-policy-runner, unchanged API |
-| `safety/*` | vendored: joint limits, EMA smoother, oscillation watchdog |
+| `safety/*` | vendored: joint limits, EMA smoother, oscillation watchdog; `workspace_bounds.py` (new) is a teleop-recorded Cartesian fence, checked every tick |
+| `cameras/manager.py` | one background thread per camera, shared by the policy loop and the dashboard's live preview |
 | `kinematics/fr3_kinematics.py` | vendored analytic FK/IK for EE action spaces |
 | `kinematics/rotations.py` | quat/rot6d <-> matrix, generalizing beyond the vendored axis-angle-only convention |
 | `schema/spec.py` | the request/response schema dataclasses -- start here |

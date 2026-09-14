@@ -12,6 +12,7 @@ from franka_deploy.cameras import CameraConfig
 from franka_deploy.cameras.manager import CameraManager
 from franka_deploy.control_loop import ControlLoop, LoopConfig
 from franka_deploy.safety.limits import DEFAULT_A_MAX, DEFAULT_FILTER_WN, DEFAULT_J_MAX, DEFAULT_V_MAX
+from franka_deploy.safety.workspace_bounds import WorkspaceBounds
 from franka_deploy.schema.spec import RequestSpec
 
 
@@ -36,6 +37,10 @@ class AppState:
         self.config = AppConfig()
         self.loop: Optional[ControlLoop] = None
         self.camera_manager = CameraManager()
+        # Lives outside ControlLoop and survives /disconnect on purpose --
+        # a workspace fence recorded by hand-guiding the robot is a fact
+        # about the physical setup, not about one session.
+        self.workspace = WorkspaceBounds()
 
 
 APP_STATE = AppState()

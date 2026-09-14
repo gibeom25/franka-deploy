@@ -217,6 +217,70 @@ $("btn-load-example").addEventListener("click", async () => {
   $("schema-status").textContent = `예시 '${name}' 불러옴 (참고용, 저장하려면 '스키마 적용' 클릭)`;
 });
 
+// ----------------------------------------------------------------- workspace
+function renderWorkspace(data) {
+  const tbody = $("workspace-points-body");
+  if (!data.points || data.points.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="hint">기록된 경계점 없음 -- 안전장치 꺼짐</td></tr>`;
+  } else {
+    tbody.innerHTML = data.points.map((p, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td class="mono">${p[0].toFixed(3)}</td>
+        <td class="mono">${p[1].toFixed(3)}</td>
+        <td class="mono">${p[2].toFixed(3)}</td>
+        <td><button class="field-delete-btn" data-idx="${i}" title="이 점 삭제">✕</button></td>
+      </tr>`).join("");
+  }
+  const bboxEl = $("workspace-bbox");
+  if (data.enabled) {
+    const f = (arr) => arr.map((v) => v.toFixed(3)).join(", ");
+    bboxEl.textContent = `활성화됨 -- 허용 범위: x/y/z ∈ [${f(data.lo)}] ~ [${f(data.hi)}] (margin ${data.margin} m)`;
+  } else {
+    bboxEl.textContent = "2개 이상 점을 찍어야 활성화됩니다.";
+  }
+  $("workspace-margin").value = data.margin;
+}
+
+async function refreshWorkspace() {
+  const r = await fetch("/api/control/workspace");
+  if (r.ok) renderWorkspace(await r.json());
+}
+refreshWorkspace();
+
+$("btn-workspace-add").addEventListener("click", async () => {
+  const r = await fetch("/api/control/workspace/add_point", { method: "POST" });
+  const data = await r.json();
+  if (!r.ok) { alert("경계점 추가 실패: " + (data.detail || r.status)); return; }
+  renderWorkspace(data);
+});
+
+$("btn-workspace-clear").addEventListener("click", async () => {
+  if (!confirm("기록된 경계점을 전부 지울까요?")) return;
+  const r = await fetch("/api/control/workspace/clear", { method: "POST" });
+  renderWorkspace(await r.json());
+});
+
+$("btn-workspace-margin").addEventListener("click", async () => {
+  const margin = parseFloat($("workspace-margin").value);
+  const r = await fetch("/api/control/workspace/margin", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ margin }),
+  });
+  renderWorkspace(await r.json());
+});
+
+$("workspace-points-body").addEventListener("click", async (ev) => {
+  const btn = ev.target.closest(".field-delete-btn");
+  if (!btn) return;
+  const index = parseInt(btn.dataset.idx, 10);
+  const r = await fetch("/api/control/workspace/remove_point", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ index }),
+  });
+  renderWorkspace(await r.json());
+});
+
 // ------------------------------------------------------------------- cameras
 async function scanCameras() {
   const r = await fetch("/api/cameras/devices");
@@ -382,12 +446,51 @@ $("btn-estop").addEventListener("click", async () => {
 });
 
 // ------------------------------------------------------------------ telemetry
+function statTile(label, value, cls) {
+  return `<div class="stat${cls ? " " + cls : ""}"><div class="stat-label">${escapeHtml(label)}</div>` +
+         `<div class="stat-value">${escapeHtml(value)}</div></div>`;
+}
+
+function renderTelemetryGrid(t) {
+  const grid = $("telemetry-grid");
+  const tiles = [];
+
+  tiles.push(statTile("상태", t.state ?? "-"));
+
+  if (t.control_command_success_rate !== undefined && t.control_command_success_rate !== null) {
+    const rate = t.control_command_success_rate;
+    const cls = rate >= 0.99 ? "stat-ok" : rate >= 0.9 ? "stat-warn" : "stat-error";
+    tiles.push(statTile("제어 성공률", (rate * 100).toFixed(1) + "%", cls));
+  }
+  if (t.last_predict_ms !== undefined && t.last_predict_ms !== null) {
+    tiles.push(statTile("정책 지연", t.last_predict_ms.toFixed(1) + " ms"));
+  }
+  if (t.n_replans !== undefined) tiles.push(statTile("재계획 횟수", t.n_replans));
+  if (t.n_late !== undefined) {
+    tiles.push(statTile("예산 초과", t.n_late, t.n_late > 0 ? "stat-warn" : "stat-ok"));
+  }
+  if (Array.isArray(t.dq)) {
+    const maxDq = Math.max(...t.dq.map(Math.abs));
+    tiles.push(statTile("최대 |dq|", maxDq.toFixed(3) + " rad/s", maxDq > 0.8 ? "stat-warn" : ""));
+  }
+  if (Array.isArray(t.ee_pos)) {
+    tiles.push(statTile("EE 위치 (m)", t.ee_pos.map((v) => v.toFixed(3)).join(", ")));
+  }
+  if (t.error) {
+    tiles.push(`<div class="stat stat-error" style="grid-column:1/-1"><div class="stat-label">에러</div>` +
+                `<div class="stat-value">${escapeHtml(t.error)}</div></div>`);
+  }
+
+  grid.innerHTML = tiles.join("");
+}
+
 function connectTelemetry() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws/telemetry`);
   ws.onmessage = (ev) => {
     const t = JSON.parse(ev.data);
     setBadge(t.state);
+    renderTelemetryGrid(t);
     $("telemetry-view").textContent = JSON.stringify(t, null, 2);
   };
   ws.onclose = () => setTimeout(connectTelemetry, 1000);

@@ -28,8 +28,51 @@ def _ensure_loop() -> ControlLoop:
             APP_STATE.camera_manager.start(build_cameras(cfg.cameras))
         safety_kwargs = dict(v_max=cfg.v_max, a_max=cfg.a_max, j_max=cfg.j_max, filter_wn=cfg.filter_wn)
         APP_STATE.loop = ControlLoop(cfg.robot_node_address, APP_STATE.camera_manager,
-                                      cfg.request_spec, cfg.loop, safety_kwargs)
+                                      cfg.request_spec, cfg.loop, safety_kwargs,
+                                      workspace_bounds=APP_STATE.workspace)
     return APP_STATE.loop
+
+
+@router.get("/workspace")
+def get_workspace():
+    return APP_STATE.workspace.to_dict()
+
+
+@router.post("/workspace/add_point")
+def add_workspace_point():
+    """Records the robot's CURRENT measured EE position as one corner of
+    the safety fence. Call this after hand-guiding the robot there
+    (Programming/white mode on Desk) -- works fine while read_only, since
+    it only reads state."""
+    loop = _ensure_loop()
+    if loop.state.value == "idle":
+        raise HTTPException(400, "call /connect first -- no robot state to read yet")
+    try:
+        loop.add_workspace_point()
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"add_point failed: {e}") from e
+    return APP_STATE.workspace.to_dict()
+
+
+@router.post("/workspace/remove_point")
+def remove_workspace_point(body: dict):
+    try:
+        APP_STATE.workspace.remove_point(int(body["index"]))
+    except IndexError as e:
+        raise HTTPException(400, f"no point at index {body.get('index')}") from e
+    return APP_STATE.workspace.to_dict()
+
+
+@router.post("/workspace/clear")
+def clear_workspace():
+    APP_STATE.workspace.clear()
+    return APP_STATE.workspace.to_dict()
+
+
+@router.post("/workspace/margin")
+def set_workspace_margin(body: dict):
+    APP_STATE.workspace.margin = float(body["margin"])
+    return APP_STATE.workspace.to_dict()
 
 
 @router.post("/connect")

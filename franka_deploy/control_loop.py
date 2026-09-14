@@ -33,10 +33,12 @@ from typing import Optional
 
 import numpy as np
 
+from franka_deploy.kinematics import fr3_kinematics as fk3
 from franka_deploy.robot.zmq_client import ZMQRobotClient
 from franka_deploy.safety.limits import clip_to_joint_limits
 from franka_deploy.safety.smoothing import EMASmoother
 from franka_deploy.safety.watchdog import OscillationTripped, OscillationWatchdog
+from franka_deploy.safety.workspace_bounds import WorkspaceBounds
 from franka_deploy.schema.apply import ActionSpaceAdapter
 from franka_deploy.schema.client import PolicyClient
 from franka_deploy.schema.response_detect import detect_action_space
@@ -115,13 +117,14 @@ class ControlLoop:
 
     def __init__(self, robot_node_address: str, camera_manager, request_spec: RequestSpec,
                  loop_cfg: Optional[LoopConfig] = None, safety_kwargs: Optional[dict] = None,
-                 gripper_runtime=None):
+                 gripper_runtime=None, workspace_bounds: Optional[WorkspaceBounds] = None):
         self._robot_node_address = robot_node_address
         self._camera_manager = camera_manager  # cameras.manager.CameraManager, own background threads
         self._client = PolicyClient(request_spec)
         self._cfg = loop_cfg or LoopConfig()
         self._safety_kwargs = safety_kwargs or {}
         self._gripper_runtime = gripper_runtime  # optional GripperRuntime, set_target(0..1)
+        self.workspace = workspace_bounds or WorkspaceBounds()
 
         self._runtime: Optional[ZMQRobotClient] = None
         self._smoother = EMASmoother(alpha=self._cfg.ema_alpha)
@@ -175,6 +178,18 @@ class ControlLoop:
         robot_state = robot_state_dict(st["q"], st["dq"], ee_pos, ee_quat, gripper)
         ctx = SourceContext(cameras=self._read_cameras(), robot_state=robot_state)
         return ctx, st, ee_pos
+
+    def add_workspace_point(self) -> list:
+        """Records the CURRENT measured EE position as one corner of the
+        workspace fence -- call this after hand-guiding the robot there
+        (Programming/white mode on Desk; read_only is fine, this only
+        reads state, never commands motion). Returns the updated point list."""
+        if self._runtime is None:
+            raise RuntimeError("connect first -- no robot state to read yet")
+        st = self._runtime.get_state()
+        ee_pos = ee_pose_to_matrix(st["ee_pose"])[:3, 3]
+        self.workspace.add_point(ee_pos)
+        return self.workspace.points
 
     # -------------------------------------------------------------- staged rollout
     def detect(self, instruction: Optional[str] = None) -> DetectionResult:
@@ -297,6 +312,16 @@ class ControlLoop:
                 smoothed = self._smoother.step(target8[:7])
                 q_tgt = q_meas + np.clip(smoothed - q_meas, -cfg.max_step_rad, cfg.max_step_rad)
                 q_tgt = clip_to_joint_limits(q_tgt)
+
+                if self.workspace.enabled:
+                    # Defense in depth: check both where we're ABOUT to command
+                    # (catches a bad target before it's ever sent) and where the
+                    # robot actually IS (catches drift even if every individual
+                    # target looked fine) -- either one exceeding the recorded
+                    # fence stops the loop the same way OscillationTripped does.
+                    self.workspace.check(fk3.fk(q_tgt)[:3, 3])
+                    self.workspace.check(ee_pose_to_matrix(st["ee_pose"])[:3, 3])
+
                 self._runtime.set_joint_target(q_tgt)
                 if self._gripper_runtime is not None:
                     self._gripper_runtime.set_target(float(target8[7]))

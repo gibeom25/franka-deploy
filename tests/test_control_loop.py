@@ -144,6 +144,53 @@ def test_control_loop_full_staged_rollout(monkeypatch):
         thread.join(timeout=2)
 
 
+def test_control_loop_stops_on_workspace_violation(monkeypatch):
+    """A workspace fence that EXCLUDES the robot's actual (fake, fixed)
+    measured position must stop the loop the same way OscillationTripped
+    does -- proves the enforcement wiring in _run(), not just the
+    WorkspaceBounds class in isolation (already covered by
+    test_workspace_bounds.py)."""
+    monkeypatch.setattr(control_loop_module, "ZMQRobotClient", FakeRobotNodeClient)
+
+    server = HTTPServer(("127.0.0.1", 0), _StubHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        cfg = yaml.safe_load(EXAMPLE_PATH.read_text())
+        spec = request_spec_from_dict(cfg["request_spec"])
+        spec.connection.server_ip = "127.0.0.1"
+        spec.connection.server_port = port
+
+        camera_manager = CameraManager()
+        camera_manager.start({"agentview": MockCamera(), "eye_in_hand": MockCamera()})
+        loop_cfg = LoopConfig(fps=50.0, exec_horizon=10, lead_ticks=2)
+        loop = ControlLoop("tcp://127.0.0.1:5560", camera_manager, spec, loop_cfg)
+
+        # A box far from EE_POS_NOW ([0.45, 0.0, 0.35]) -- the fake robot's
+        # measured position will never be inside it.
+        loop.workspace.add_point([1.0, 1.0, 1.0])
+        loop.workspace.add_point([1.2, 1.2, 1.2])
+        assert loop.workspace.enabled
+
+        loop.connect(read_only=True)
+        result = loop.detect(instruction="pick up the cup")
+        loop.confirm(result.spec)
+        loop.start(instruction="pick up the cup")
+
+        deadline = time.monotonic() + 2.0
+        while loop.state != State.ERROR and time.monotonic() < deadline:
+            time.sleep(0.02)
+
+        assert loop.state == State.ERROR
+        telemetry = loop.get_telemetry()
+        assert "workspace" in telemetry.error.lower()
+    finally:
+        camera_manager.stop()
+        server.shutdown()
+        thread.join(timeout=2)
+
+
 if __name__ == "__main__":
     import pytest
 
