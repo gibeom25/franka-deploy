@@ -201,18 +201,18 @@ td.k { color: var(--muted); width: 40%; }
 #schema-summary td.mono { font-family: ui-monospace, monospace; font-size: 0.78rem; }
 #schema-summary td.err { color: var(--danger); }
 
-details#field-builder {
+details#field-builder, details#reset-fields-builder {
   margin-bottom: 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   padding: 6px 14px;
   background: var(--panel-2);
 }
-details#field-builder summary { cursor: pointer; color: var(--accent); font-size: 0.82rem; padding: 8px 0; list-style: none; }
-details#field-builder summary::-webkit-details-marker { display: none; }
-details#field-builder summary::before { content: "▸ "; }
-details#field-builder[open] summary::before { content: "▾ "; }
-details#field-builder[open] summary { margin-bottom: 4px; }
+details#field-builder summary, details#reset-fields-builder summary { cursor: pointer; color: var(--accent); font-size: 0.82rem; padding: 8px 0; list-style: none; }
+details#field-builder summary::-webkit-details-marker, details#reset-fields-builder summary::-webkit-details-marker { display: none; }
+details#field-builder summary::before, details#reset-fields-builder summary::before { content: "▸ "; }
+details#field-builder[open] summary::before, details#reset-fields-builder[open] summary::before { content: "▾ "; }
+details#field-builder[open] summary, details#reset-fields-builder[open] summary { margin-bottom: 4px; }
 .field-delete-btn { background: transparent; color: var(--danger); border: none; cursor: pointer; padding: 2px 6px; font-size: 0.95rem; border-radius: 5px; }
 .field-delete-btn:hover { background: rgba(240, 85, 90, 0.15); }
 

@@ -1,0 +1,112 @@
+# A real-robot RGB+language inference server matching a specific
+# collaborator's protocol (kept generic here -- see local, gitignored
+# notes for the actual endpoint/host/task_id in use). Unlike the other
+# example profiles, this one is a byte-for-byte match to a real, deployed
+# server protocol, not a hypothetical template -- adjust server_ip/
+# server_port and task_id (one of the keys that server's /info reports)
+# to your own setup.
+#
+# MUST be set before starting the franka-deploy app server (uvicorn):
+#   export ROLEVLA_API_TOKEN=<the real token>
+# The header value below is a literal "$ROLEVLA_API_TOKEN" placeholder --
+# resolved from the environment at request time, never written to disk
+# resolved (see schema/client.py's docstring).
+#
+# This kind of server commonly listens on 127.0.0.1 on the REMOTE machine
+# only, reachable through an SSH local port forward:
+#   ssh -L <local_port>:127.0.0.1:<remote_port> <user>@<host> -p <ssh_port>
+# server_ip below is then "127.0.0.1" and server_port is the LOCAL
+# forwarded port, not a port on the remote host directly.
+
+request_spec:
+  connection:
+    server_ip: "127.0.0.1"
+    server_port: 8000
+    scheme: "http"
+    predict_endpoint: "/predict"
+    reset_endpoint: "/reset"
+    headers:
+      Authorization: "Bearer $ROLEVLA_API_TOKEN"
+  actions_key: "actions"
+  # The dashboard's "reset instruction" box sends whatever you type there
+  # under this field name -- for THIS server it must be an exact task_id
+  # key from task_instructions.json, not free text, e.g.:
+  #   Pick_up_the_cup_between_the_two_blue_bowls_and_place_it_on_the_yellow_plate
+  #   Pick_up_the_red_cup_beside_the_large_plate_and_move_it_next_to_the_blue_bowl.
+  instruction_field: "task_id"
+  reset_fields:
+    - name: "protocol_version"
+      source: "static:1"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+  fields:
+    - name: "protocol_version"
+      source: "static:1"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+    - name: "session_id"
+      source: "session:id"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+    - name: "sequence"
+      source: "session:sequence"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+    - name: "request_id"
+      source: "session:request_id"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+    - name: "observation_timestamp_ns"
+      source: "session:timestamp_ns"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "none"
+      transform_fn: null
+    # Server resizes/normalizes itself (PIL bilinear -> CHW float32/255) --
+    # send the raw camera frame as lossless PNG, no client-side resize.
+    - name: "images.agentview_rgb"
+      source: "camera:agentview"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "png_base64_str"
+      transform_fn: null
+    - name: "images.eye_in_hand_rgb"
+      source: "camera:eye_in_hand"
+      dtype: null
+      shape: null
+      resize: null
+      layout: "HWC"
+      normalize: null
+      encoding: "png_base64_str"
+      transform_fn: null

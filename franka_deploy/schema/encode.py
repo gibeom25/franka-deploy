@@ -50,7 +50,7 @@ def _b64_raw(arr: np.ndarray, dtype: str) -> dict:
             "shape": list(arr.shape), "dtype": dtype}
 
 
-def _b64_image(arr: np.ndarray, fmt: str) -> dict:
+def _encode_image_bytes(arr: np.ndarray, fmt: str) -> bytes:
     import cv2
 
     if arr.dtype != np.uint8:
@@ -59,7 +59,17 @@ def _b64_image(arr: np.ndarray, fmt: str) -> dict:
     ok, buf = cv2.imencode(f".{fmt}", bgr)
     if not ok:
         raise RuntimeError(f"cv2.imencode failed for format {fmt!r}")
-    return {"base64": base64.b64encode(buf.tobytes()).decode(), "format": fmt}
+    return buf.tobytes()
+
+
+def _b64_image(arr: np.ndarray, fmt: str) -> dict:
+    return {"base64": base64.b64encode(_encode_image_bytes(arr, fmt)).decode(), "format": fmt}
+
+
+def _b64_image_str(arr: np.ndarray, fmt: str) -> str:
+    """Bare base64 string, no wrapper object -- some servers (e.g. RoleVLA's
+    serve_real_robot.py) expect exactly that instead of {"base64": ..., ...}."""
+    return base64.b64encode(_encode_image_bytes(arr, fmt)).decode()
 
 
 def build_field_value(raw_value: Any, spec: RequestFieldSpec) -> Any:
@@ -101,6 +111,8 @@ def _build_array_value(raw_value: Any, spec: RequestFieldSpec) -> Any:
         return _b64_image(arr, "png")
     if spec.encoding == "jpeg_base64":
         return _b64_image(arr, "jpg")
+    if spec.encoding == "png_base64_str":
+        return _b64_image_str(arr, "png")
     # "none": plain JSON-embedded array (fine for small state/embedding vectors,
     # not for images -- use one of the base64 encodings for those).
     return arr.tolist()

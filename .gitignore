@@ -6,3 +6,8 @@ __pycache__/
 venv/
 configs/current.yaml
 configs/*.local.yaml
+
+# Third-party code/config shared privately (e.g. a collaborator's model
+# server implementation) -- this repo is public, never commit someone
+# else's proprietary code without their explicit permission.
+/RoleVLA_files/

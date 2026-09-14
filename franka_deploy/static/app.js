@@ -156,11 +156,23 @@ function setBadge(state) {
 
 // ------------------------------------------------------------------ config
 function gatherConfig() {
-  let fields;
+  let fields, resetFields, headers;
   try {
     fields = JSON.parse($("schema-editor").value);
   } catch (e) {
     $("schema-status").textContent = "JSON 파싱 오류: " + e.message;
+    throw e;
+  }
+  try {
+    resetFields = JSON.parse($("reset-fields-editor").value || "[]");
+  } catch (e) {
+    $("schema-status").textContent = "reset 필드 JSON 파싱 오류: " + e.message;
+    throw e;
+  }
+  try {
+    headers = $("conn-headers").value.trim() ? JSON.parse($("conn-headers").value) : {};
+  } catch (e) {
+    $("schema-status").textContent = "헤더 JSON 파싱 오류: " + e.message;
     throw e;
   }
   const cameras = [];
@@ -184,8 +196,10 @@ function gatherConfig() {
         scheme: "http",
         predict_endpoint: $("predict-endpoint").value.trim(),
         reset_endpoint: $("reset-endpoint").value.trim(),
+        headers,
       },
       fields,
+      reset_fields: resetFields,
       actions_key: $("actions-key").value.trim(),
       instruction_field: $("instruction-field").value.trim() || null,
     },
@@ -250,11 +264,16 @@ $("btn-load-example").addEventListener("click", async () => {
   const cfg = await r.json();
   if (cfg.request_spec) {
     $("schema-editor").value = JSON.stringify(cfg.request_spec.fields, null, 2);
+    $("reset-fields-editor").value = JSON.stringify(cfg.request_spec.reset_fields || [], null, 2);
     const c = cfg.request_spec.connection || {};
+    if (c.server_ip) $("server-ip").value = c.server_ip;
+    if (c.server_port) $("server-port").value = c.server_port;
     if (c.predict_endpoint) $("predict-endpoint").value = c.predict_endpoint;
     if (c.reset_endpoint) $("reset-endpoint").value = c.reset_endpoint;
+    $("conn-headers").value = c.headers && Object.keys(c.headers).length ? JSON.stringify(c.headers) : "";
     if (cfg.request_spec.actions_key) $("actions-key").value = cfg.request_spec.actions_key;
-    if (cfg.request_spec.instruction_field) $("instruction-field").value = cfg.request_spec.instruction_field;
+    $("instruction-field").value = cfg.request_spec.instruction_field || "";
+    renderSchemaSummary();
   }
   $("schema-status").textContent = `예시 '${name}' 불러옴 (참고용, 저장하려면 '스키마 적용' 클릭)`;
 });

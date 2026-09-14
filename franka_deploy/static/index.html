@@ -46,6 +46,11 @@
           <label>eye_in_hand 카메라 <select id="cam-wrist-serial"><option value="">(mock 이미지)</option></select></label>
           <label>&nbsp;<button id="btn-scan-cameras" type="button">카메라 검색</button></label>
         </div>
+        <div class="row">
+          <label>커스텀 HTTP 헤더 (JSON, 선택 -- 인증 토큰 등)
+            <input id="conn-headers" placeholder='{"Authorization": "Bearer $TOKEN_ENV_VAR"}'>
+          </label>
+        </div>
         <div class="actions">
           <button id="btn-save-config">설정 저장</button>
           <label class="inline"><input type="checkbox" id="read-only-toggle" checked> read_only로 연결</label>
@@ -137,7 +142,8 @@
               <select id="fb-encoding">
                 <option value="none">none (JSON 배열)</option>
                 <option value="raw_bytes_base64">raw_bytes_base64</option>
-                <option value="png_base64">png_base64</option>
+                <option value="png_base64">png_base64 ({base64, format})</option>
+                <option value="png_base64_str">png_base64_str (순수 문자열)</option>
                 <option value="jpeg_base64">jpeg_base64</option>
               </select>
             </label>
@@ -151,6 +157,14 @@
         </details>
 
         <textarea id="schema-editor" rows="18" spellcheck="false"></textarea>
+
+        <details id="reset-fields-builder">
+          <summary>reset 전용 필드 (고급, 보통 비워둠 -- /predict와 다른 필드가 /reset에 필요할 때만)</summary>
+          <p class="hint">예: 세션 기반 서버가 <code>/reset</code>에 <code>protocol_version</code>처럼
+            <code>/predict</code>와는 다른 필드를 요구할 때. 형식은 위 스키마와 동일한 필드 배열.</p>
+          <textarea id="reset-fields-editor" rows="6" spellcheck="false">[]</textarea>
+        </details>
+
         <div class="actions">
           <button id="btn-apply-schema">스키마 적용</button>
           <span id="schema-status"></span>

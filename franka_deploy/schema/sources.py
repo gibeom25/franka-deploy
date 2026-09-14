@@ -14,6 +14,7 @@ in spec.py:
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 import numpy as np
@@ -69,7 +70,14 @@ def resolve_source(source: str, ctx: SourceContext) -> Any:
         return ctx.robot_state[detail]
 
     if kind == "static":
-        return detail
+        # "static:1" -> int 1, "static:true" -> bool True, etc. -- lets a
+        # static field carry a protocol constant (e.g. protocol_version=1)
+        # correctly typed. Falls back to the raw string for ordinary text
+        # ("static:pick up the cup" isn't valid JSON, so json.loads raises).
+        try:
+            return json.loads(detail)
+        except (json.JSONDecodeError, ValueError):
+            return detail
 
     if kind == "custom":
         fn: Callable[[SourceContext], Any] = load_plugin(detail)

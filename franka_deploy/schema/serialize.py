@@ -22,9 +22,11 @@ def request_spec_to_dict(spec: RequestSpec) -> dict:
 def request_spec_from_dict(d: dict) -> RequestSpec:
     conn = ConnectionSpec(**d["connection"])
     fields = [RequestFieldSpec(**f) for f in d.get("fields", [])]
+    reset_fields = [RequestFieldSpec(**f) for f in d.get("reset_fields", [])]
     return RequestSpec(
         connection=conn,
         fields=fields,
+        reset_fields=reset_fields,
         actions_key=d.get("actions_key", "actions"),
         instruction_field=d.get("instruction_field"),
     )
