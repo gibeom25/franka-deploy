@@ -24,7 +24,14 @@ async def telemetry_ws(ws: WebSocket) -> None:
             else:
                 t = loop.get_telemetry()
                 payload = asdict(t)
-                payload["state"] = t.state.value
+                # loop.state is the authoritative live state (connect/detect/
+                # confirm all update it); t.state is a snapshot only ever
+                # refreshed inside _run()'s tick loop (RUNNING/ERROR), so it
+                # was stuck reporting a stale "idle" through every earlier
+                # stage -- CONNECTED, DETECTING, AWAITING_CONFIRM, ARMED --
+                # right after the corresponding button's own response had
+                # already shown the correct state for a moment.
+                payload["state"] = loop.state.value
             await ws.send_json(payload)
             await asyncio.sleep(0.1)
     except WebSocketDisconnect:
