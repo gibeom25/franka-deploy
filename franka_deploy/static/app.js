@@ -25,6 +25,27 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
   setTab(initial);
 })();
 
+// ------------------------------------------------------------------ subtabs
+function setSubtab(name) {
+  document.querySelectorAll(".subtab-page").forEach((el) => {
+    el.classList.toggle("hidden", el.dataset.subtab !== name);
+  });
+  document.querySelectorAll(".subtab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.subtab === name);
+  });
+  try { localStorage.setItem("franka-deploy-subtab", name); } catch (e) { /* ignore */ }
+}
+document.querySelectorAll(".subtab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setSubtab(btn.dataset.subtab));
+});
+(() => {
+  let initial = "connection";
+  try { initial = localStorage.getItem("franka-deploy-subtab") || "connection"; } catch (e) { /* ignore */ }
+  const fromUrl = new URLSearchParams(location.search).get("subtab");
+  if (fromUrl) initial = fromUrl;
+  setSubtab(initial);
+})();
+
 const DEFAULT_SCHEMA_FIELDS = [
   { name: "instruction", source: "static:pick up the cup", dtype: null, shape: null,
     resize: null, layout: "HWC", normalize: null, encoding: "none", transform_fn: null },

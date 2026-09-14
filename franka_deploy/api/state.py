@@ -42,5 +42,13 @@ class AppState:
         # about the physical setup, not about one session.
         self.workspace = WorkspaceBounds()
 
+        # Restore whatever was last saved (see api/persist.py) so an app
+        # restart doesn't silently wipe the operator's config or a
+        # hand-recorded workspace fence.
+        from franka_deploy.api import persist
+
+        persist.load_config_into(self.config)
+        persist.load_workspace_into(self.workspace)
+
 
 APP_STATE = AppState()

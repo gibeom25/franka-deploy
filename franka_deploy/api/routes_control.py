@@ -8,6 +8,7 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, HTTPException
 
+from franka_deploy.api import persist
 from franka_deploy.api.state import APP_STATE
 from franka_deploy.cameras import build_cameras
 from franka_deploy.control_loop import ControlLoop
@@ -51,6 +52,7 @@ def add_workspace_point():
         loop.add_workspace_point()
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, f"add_point failed: {e}") from e
+    persist.save_workspace(APP_STATE.workspace)
     return APP_STATE.workspace.to_dict()
 
 
@@ -60,18 +62,21 @@ def remove_workspace_point(body: dict):
         APP_STATE.workspace.remove_point(int(body["index"]))
     except IndexError as e:
         raise HTTPException(400, f"no point at index {body.get('index')}") from e
+    persist.save_workspace(APP_STATE.workspace)
     return APP_STATE.workspace.to_dict()
 
 
 @router.post("/workspace/clear")
 def clear_workspace():
     APP_STATE.workspace.clear()
+    persist.save_workspace(APP_STATE.workspace)
     return APP_STATE.workspace.to_dict()
 
 
 @router.post("/workspace/margin")
 def set_workspace_margin(body: dict):
     APP_STATE.workspace.margin = float(body["margin"])
+    persist.save_workspace(APP_STATE.workspace)
     return APP_STATE.workspace.to_dict()
 
 

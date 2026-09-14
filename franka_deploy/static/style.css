@@ -59,6 +59,19 @@ body {
 .tab-btn:hover { background: var(--panel); color: var(--text); border-color: transparent; }
 .tab-btn.active { background: var(--panel-2); color: var(--text); border-color: var(--border); }
 
+.subtabs { display: flex; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.subtab-btn {
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  color: var(--muted);
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 550;
+}
+.subtab-btn:hover { color: var(--text); border-color: var(--border); }
+.subtab-btn.active { background: var(--panel-2); color: var(--text); border-color: var(--border); }
+
 h1 {
   font-size: 1.15rem;
   font-weight: 650;

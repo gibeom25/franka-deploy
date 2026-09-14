@@ -13,6 +13,7 @@ from pathlib import Path
 import yaml
 from fastapi import APIRouter, HTTPException
 
+from franka_deploy.api import persist
 from franka_deploy.api.state import APP_STATE
 from franka_deploy.cameras import CameraConfig
 from franka_deploy.control_loop import LoopConfig
@@ -51,6 +52,7 @@ def set_config(body: dict):
     for k in ("v_max", "a_max", "j_max", "filter_wn"):
         if k in body:
             setattr(cfg, k, body[k])
+    persist.save_config(cfg)
     return get_config()
 
 
