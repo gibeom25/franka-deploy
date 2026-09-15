@@ -22,6 +22,8 @@ from typing import Optional
 
 import numpy as np
 
+from franka_deploy.cameras import CameraConfig, build_cameras
+
 
 class _CameraWorker:
     def __init__(self, camera):
@@ -65,8 +67,15 @@ class CameraManager:
     def __init__(self):
         self._workers: dict[str, _CameraWorker] = {}
 
-    def start(self, cameras: dict, ready_timeout: float = 5.0) -> None:
-        """cameras: role -> object with .read() -> (rgb HWC uint8, depth).
+    def start(self, configs: list[CameraConfig], ready_timeout: float = 5.0) -> None:
+        """Stops whatever is currently running FIRST, then builds fresh
+        camera objects from configs -- in that order. Building the new
+        RealSenseCamera (which opens a pipeline in __init__) before the old
+        one released the same physical device was a real, observed bug:
+        the two pipelines raced for the same USB device and start() lost
+        that race often enough to matter. Taking configs (not pre-built
+        camera objects) instead of leaving construction to the caller is
+        what lets this method guarantee the order.
 
         Blocks until every camera has produced its first frame (or errored),
         up to ready_timeout -- without this, a caller that reads a frame
@@ -74,6 +83,8 @@ class CameraManager:
         race the background thread's very first capture and see "no frame
         yet" even though the camera is working fine."""
         self.stop()
+        time.sleep(0.3)  # let the just-released USB pipeline fully settle before reopening
+        cameras = build_cameras(configs)
         self._workers = {role: _CameraWorker(cam) for role, cam in cameras.items()}
         deadline = time.monotonic() + ready_timeout
         for w in self._workers.values():

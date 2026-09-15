@@ -18,8 +18,8 @@ import numpy as np  # noqa: E402
 import yaml  # noqa: E402
 
 import franka_deploy.control_loop as control_loop_module  # noqa: E402
+from franka_deploy.cameras import CameraConfig  # noqa: E402
 from franka_deploy.cameras.manager import CameraManager  # noqa: E402
-from franka_deploy.cameras.mock import MockCamera  # noqa: E402
 from franka_deploy.control_loop import ControlLoop, LoopConfig, State  # noqa: E402
 from franka_deploy.schema.serialize import request_spec_from_dict  # noqa: E402
 from franka_deploy.schema.spec import ACTION_SPACE_JOINT_ABSOLUTE  # noqa: E402
@@ -112,7 +112,7 @@ def test_control_loop_full_staged_rollout(monkeypatch):
         spec.connection.server_port = port
 
         camera_manager = CameraManager()
-        camera_manager.start({"agentview": MockCamera(), "eye_in_hand": MockCamera()})
+        camera_manager.start([CameraConfig(role="agentview", serial=None), CameraConfig(role="eye_in_hand", serial=None)])
         loop_cfg = LoopConfig(fps=50.0, exec_horizon=10, lead_ticks=2)
         loop = ControlLoop("tcp://127.0.0.1:5560", camera_manager, spec, loop_cfg)
 
@@ -163,7 +163,7 @@ def test_control_loop_stops_on_workspace_violation(monkeypatch):
         spec.connection.server_port = port
 
         camera_manager = CameraManager()
-        camera_manager.start({"agentview": MockCamera(), "eye_in_hand": MockCamera()})
+        camera_manager.start([CameraConfig(role="agentview", serial=None), CameraConfig(role="eye_in_hand", serial=None)])
         loop_cfg = LoopConfig(fps=50.0, exec_horizon=10, lead_ticks=2)
         loop = ControlLoop("tcp://127.0.0.1:5560", camera_manager, spec, loop_cfg)
 

@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from franka_deploy.api.state import APP_STATE
-from franka_deploy.cameras import build_cameras
 
 router = APIRouter(prefix="/api/cameras")
 
@@ -35,7 +34,7 @@ def start_preview():
     if not cfg.cameras:
         raise HTTPException(400, "no cameras configured -- POST /api/config first")
     try:
-        cams = build_cameras(cfg.cameras)
+        APP_STATE.camera_manager.start(cfg.cameras)
     except RuntimeError as e:
         # Most common real cause: another process (a collection GUI, a
         # previous crashed session) already has the RealSense pipeline
@@ -44,7 +43,6 @@ def start_preview():
             409, f"camera open failed -- is another app (e.g. a data-collection GUI) "
                  f"already using it? ({e})"
         ) from e
-    APP_STATE.camera_manager.start(cams)
     return {"roles": APP_STATE.camera_manager.roles()}
 
 

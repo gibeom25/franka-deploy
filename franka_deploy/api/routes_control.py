@@ -10,7 +10,6 @@ from fastapi import APIRouter, HTTPException
 
 from franka_deploy.api import persist
 from franka_deploy.api.state import APP_STATE
-from franka_deploy.cameras import build_cameras
 from franka_deploy.control_loop import ControlLoop
 from franka_deploy.schema.spec import ActionSpaceSpec
 
@@ -26,7 +25,7 @@ def _ensure_loop() -> ControlLoop:
         # rather than opening the cameras a second time -- a RealSense
         # device can't be opened by two pipelines at once.
         if not APP_STATE.camera_manager.roles() and cfg.cameras:
-            APP_STATE.camera_manager.start(build_cameras(cfg.cameras))
+            APP_STATE.camera_manager.start(cfg.cameras)
         safety_kwargs = dict(v_max=cfg.v_max, a_max=cfg.a_max, j_max=cfg.j_max, filter_wn=cfg.filter_wn)
         APP_STATE.loop = ControlLoop(cfg.robot_node_address, APP_STATE.camera_manager,
                                       cfg.request_spec, cfg.loop, safety_kwargs,
